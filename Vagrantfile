@@ -20,7 +20,7 @@ Vagrant.configure("2") do |config|
 
   # Конфигурация VirtualBox
   config.vm.provider "virtualbox" do |vb|
-    vb.memory = 2048  # Выделение 4 ГБ оперативной памяти
+    vb.memory = 4096  # Выделение 4 ГБ оперативной памяти
     vb.cpus = 2       # Использование 2 ядер процессора
   end
 
