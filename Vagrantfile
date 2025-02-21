@@ -1,39 +1,59 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
-# This is a standard metadata comment that ensures proper syntax highlighting in editors.
+# Vagrant configuration file to set up a development environment.
 
-# Define a shell script to install dependencies (runs during provisioning)
+# Shell script to install dependencies (runs during provisioning)
 $install_deps = <<-'SHELL'
-  sudo apt-get update -y  # Updates the package lists to get the latest versions
-  sudo apt-get install -y openjdk-17-jdk  # Installs OpenJDK 17 without asking for confirmation
+  set -e  # Exit immediately if a command exits with a non-zero status (fail-fast)
+  
+  # Update package lists and install dependencies
+  echo "Updating package lists..."
+  sudo apt-get update -y
+  
+  echo "Installing OpenJDK 17..."
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y openjdk-17-jdk
+  
+  echo "Dependency installation completed successfully!"
 SHELL
 
-# Define a shell script to run the Gradle wrapper inside the /vagrant directory
-$run_graldew = <<-'SHELL'
-  cd /vagrant  # Navigate to the shared Vagrant directory
-  ./gradlew bootRun  # Run the Gradle build tool with the `bootRun` task (for a Spring Boot app)
+# Shell script to run the Gradle wrapper inside the shared /vagrant directory
+$run_gradlew = <<-'SHELL'
+  set -e  # Fail on first error
+  
+  cd /vagrant  # Navigate to the shared project directory
+  
+  if [ ! -f "./gradlew" ]; then
+    echo "Error: Gradle wrapper (gradlew) not found!"
+    exit 1
+  fi
+  
+  echo "Starting the application with Gradle..."
+  ./gradlew bootRun
 SHELL
 
 # Begin Vagrant configuration
 Vagrant.configure("2") do |config|
-  # Specify the base image (Ubuntu 22.04 "Jammy Jellyfish")
+  # Use Ubuntu 22.04 (Jammy Jellyfish) as the base image
   config.vm.box = "ubuntu/jammy64"
 
   # Set up a private network with a fixed IP address
   config.vm.network "private_network", ip: "192.168.100.100"
 
-  # Configure the virtual machine resources
+  # Configure VM resources
   config.vm.provider "virtualbox" do |vb|
-    vb.memory = 2048  # Allocate 2GB of RAM to the VM
-    vb.cpus = 2       # Assign 2 CPU cores to the VM
+    vb.memory = 2048  # Allocate 2GB of RAM
+    vb.cpus = 2       # Assign 2 CPU cores
   end
 
-  # Provisioning: Run the installation script when the VM is set up
+  # Enable SSH access via the private network
+  config.ssh.host = "192.168.100.100"
+  config.ssh.insert_key = false
+
+  # Provisioning: Install dependencies when the VM is created
   config.vm.provision "shell", inline: $install_deps
 
-  # Define a trigger to run after the VM has started
+  # Ensure the Gradle application starts only after the VM is fully up
   config.trigger.after :up do |_trigger|
-    # Run the Gradle wrapper to start the application
-    config.vm.provision "shell", inline: $run_graldew
+    config.vm.provision "shell", inline: $run_gradlew
   end
 end
