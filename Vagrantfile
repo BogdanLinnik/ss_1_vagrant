@@ -1,39 +1,58 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
-# This is a standard metadata comment that ensures proper syntax highlighting in editors.
 
-# Define a shell script to install dependencies (runs during provisioning)
+# Скрипт установки Java 17 и необходимых зависимостей
+
 $install_deps = <<-'SHELL'
-  sudo apt-get update -y  # Updates the package lists to get the latest versions
-  sudo apt-get install -y openjdk-17-jdk  # Installs OpenJDK 17 without asking for confirmation
+ sudo apt-get update -y
+ sudo apt-get install -y openjdk-17-jdk
 SHELL
 
-# Define a shell script to run the Gradle wrapper inside the /vagrant directory
-$run_graldew = <<-'SHELL'
-  cd /vagrant  # Navigate to the shared Vagrant directory
-  ./gradlew bootRun  # Run the Gradle build tool with the `bootRun` task (for a Spring Boot app)
-SHELL
-
-# Begin Vagrant configuration
 Vagrant.configure("2") do |config|
-  # Specify the base image (Ubuntu 22.04 "Jammy Jellyfish")
+  # Использование базового образа Ubuntu 22.04 (Jammy Jellyfish)
   config.vm.box = "ubuntu/jammy64"
 
-  # Set up a private network with a fixed IP address
+  # Настройка приватной сети с фиксированным IP-адресом
   config.vm.network "private_network", ip: "192.168.100.100"
 
-  # Configure the virtual machine resources
+  # Проброс порта 8080 с гостевой ОС на хост
+  config.vm.network "forwarded_port", guest: 80, host: 8080
+
+  # Конфигурация VirtualBox
   config.vm.provider "virtualbox" do |vb|
-    vb.memory = 2048  # Allocate 2GB of RAM to the VM
-    vb.cpus = 2       # Assign 2 CPU cores to the VM
+    vb.memory = 4096  # Выделение 4 ГБ оперативной памяти
+    vb.cpus = 2       # Использование 2 ядер процессора
   end
 
-  # Provisioning: Run the installation script when the VM is set up
+  # Установка зависимостей при первом запуске ВМ
   config.vm.provision "shell", inline: $install_deps
 
-  # Define a trigger to run after the VM has started
-  config.trigger.after :up do |_trigger|
-    # Run the Gradle wrapper to start the application
-    config.vm.provision "shell", inline: $run_graldew
-  end
+  # Создание systemd-сервиса для запуска приложения
+  config.vm.provision "shell", inline: <<-'SHELL'
+  sudo bash -c 'cat <<EOF > /etc/systemd/system/gradle-app.service
+[Unit]
+Description=Gradle Spring Boot Application
+After=network.target
+
+[Service]
+User=vagrant
+WorkingDirectory=/vagrant
+ExecStart=/vagrant/gradlew bootRun
+Restart=always
+StandardOutput=journal
+StandardError=journal
+Environment=JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+Environment=PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/lib/jvm/java-17-openjdk-amd64/bin
+
+[Install]
+WantedBy=multi-user.target
+EOF'
+
+   # Reload systemd, enable and start the service
+   sudo systemctl daemon-reload
+   sudo systemctl enable gradle-app.service
+   sudo systemctl start gradle-app.service
+
+   echo "Systemd service for Gradle application created and started successfully!"
+ SHELL
 end
